@@ -13,7 +13,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.metrics import (
-    accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, confusion_matrix
+    accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
 )
 
 warnings.filterwarnings("ignore")
@@ -103,10 +103,14 @@ def train_and_track():
 
     # List of experiment configurations (Multiple Experiments)
     candidate_models = [
-        ("LogisticRegression_Baseline", LogisticRegression(max_iter=1000, class_weight="balanced", random_state=42)),
-        ("RandomForest_100trees", RandomForestClassifier(n_estimators=100, max_depth=8, class_weight="balanced", random_state=42)),
-        ("RandomForest_200trees", RandomForestClassifier(n_estimators=200, max_depth=12, class_weight="balanced", random_state=42)),
-        ("GradientBoosting_Default", GradientBoostingClassifier(n_estimators=100, learning_rate=0.05, max_depth=4, random_state=42)),
+        ("LogisticRegression_Baseline",
+         LogisticRegression(max_iter=1000, class_weight="balanced", random_state=42)),
+        ("RandomForest_100trees",
+         RandomForestClassifier(n_estimators=100, max_depth=8, class_weight="balanced", random_state=42)),
+        ("RandomForest_200trees",
+         RandomForestClassifier(n_estimators=200, max_depth=12, class_weight="balanced", random_state=42)),
+        ("GradientBoosting_Default",
+         GradientBoostingClassifier(n_estimators=100, learning_rate=0.05, max_depth=4, random_state=42)),
     ]
 
     best_roc_auc = -1.0
@@ -158,7 +162,8 @@ def train_and_track():
                 input_example=X_train.iloc[:3]
             )
 
-            print(f"   [{run_name}] CV ROC-AUC: {metrics['cv_roc_auc_mean']:.4f} | Test ROC-AUC: {metrics['test_roc_auc']:.4f} | Recall: {metrics['test_recall_default']:.4f}")
+            print(f"   [{run_name}] CV ROC-AUC: {metrics['cv_roc_auc_mean']:.4f} | "
+                  f"Test ROC-AUC: {metrics['test_roc_auc']:.4f} | Recall: {metrics['test_recall_default']:.4f}")
 
             if metrics["test_roc_auc"] > best_roc_auc:
                 best_roc_auc = metrics["test_roc_auc"]
@@ -180,4 +185,4 @@ def train_and_track():
 
 
 if __name__ == "__main__":
-    train_and_track()
+    train_and_track()

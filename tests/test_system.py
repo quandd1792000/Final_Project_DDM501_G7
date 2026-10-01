@@ -1,7 +1,6 @@
 # tests/test_system.py
 import numpy as np
 import pandas as pd
-import pytest
 from fastapi.testclient import TestClient
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
@@ -86,4 +85,4 @@ class TestAPIIntegration:
     def test_guardrail_blocks_invalid_request_via_api(self):
         bad_payload = {"features": [12.0, -100.0, 2.0, 2.0, 15.0, 1.0, 1.0, 1.0]}
         response = client.post("/predict", json=bad_payload)
-        assert response.status_code == 422
+        assert response.status_code == 422

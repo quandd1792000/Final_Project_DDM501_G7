@@ -64,7 +64,8 @@ class PredictionRequest(BaseModel):
         ...,
         min_length=8,
         max_length=8,
-        description="[duration, credit_amount, installment_commitment, residence_since, age, existing_credits, num_dependents, is_male]"
+        description="[duration, credit_amount, installment_commitment, "
+                    "residence_since, age, existing_credits, num_dependents, is_male]"
     )
 
 
@@ -214,4 +215,4 @@ async def explain_prediction(request: PredictionRequest) -> Dict:
 
 @app.get("/metrics")
 async def metrics():
-    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
