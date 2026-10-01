@@ -1,0 +1,5 @@
+mappings:
+- match: "airflow.*"
+  name: "airflow_metrics"
+  labels:
+    metric: "$1"

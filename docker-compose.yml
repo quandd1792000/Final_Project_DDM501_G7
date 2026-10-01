@@ -1,0 +1,99 @@
+version: '3.8'
+
+services:
+  # 1. Cơ sở dữ liệu lưu metadata của MLflow
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: mlflow
+      POSTGRES_PASSWORD: mlflow_password
+      POSTGRES_DB: mlflow_db
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "mlflow" ]
+      interval: 5s
+      retries: 5
+
+  # 2. Kho lưu trữ S3 (MinIO) để lưu file mô hình (Artifacts)
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+  # 3. Tự động tạo bucket 'mlflow' trong MinIO
+  create-bucket:
+    image: minio/mc
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c " sleep 5; mc alias set myminio http://minio:9000 minioadmin minioadmin123; mc mb myminio/mlflow || echo 'Bucket already exists'; "
+
+  # 4. MLflow Tracking Server
+  mlflow:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    command: >
+      mlflow server --backend-store-uri postgresql://mlflow:mlflow_password@postgres:5432/mlflow_db --default-artifact-root s3://mlflow --host 0.0.0.0
+    ports:
+      - "5000:5000"
+    environment:
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin123
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # 5. Dịch vụ Dự đoán (Credit Risk API)
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin123
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+      - MODEL_NAME=credit_risk_classifier # Tên mô hình khớp với lúc training
+      - MODEL_STAGE=Production
+    depends_on:
+      - mlflow
+
+  # 6. Dịch vụ Giám sát Data Drift (Evidently)
+  evidently:
+    build:
+      context: .
+      dockerfile: evidently/Dockerfile
+    ports:
+      - "8001:8001"
+
+  # 7. Máy chủ gom Metrics (Prometheus)
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./config/alert_rules.yml:/etc/prometheus/alert_rules.yml
+    ports:
+      - "9090:9090"
+
+  # 8. Bảng điều khiển (Grafana)
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./config/grafana/provisioning:/etc/grafana/provisioning
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - prometheus
