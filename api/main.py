@@ -26,7 +26,7 @@ FEATURE_NAMES = [
 
 CLASS_NAMES = ["good_credit", "bad_credit_risk"]
 
-# Prometheus Metrics (Giống cấu trúc project mẫu để khớp Grafana)
+# Prometheus Metrics (Similar to sample project structure to match Grafana)
 PREDICTION_COUNTER = Counter(
     "ml_predictions_total", "Total number of credit predictions", ["predicted_class", "model_version"]
 )
@@ -49,7 +49,7 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Biến toàn cục giữ mô hình
+# Global variable holding the model
 model_state = {
     "model": None,
     "version": "unloaded",
@@ -79,29 +79,29 @@ class PredictionResponse(BaseModel):
 
 
 def apply_credit_guardrails(features: List[float]) -> Optional[str]:
-    """Rào chắn an toàn (Guardrails - Bài giảng S02): Kiểm tra quy tắc nghiệp vụ cứng trước khi gọi ML."""
+    """Safety Guardrails (Lecture S02): Check hard business rules before calling ML."""
     duration, credit_amount, installment, residence, age, existing_credits, dependents, is_male = features
     if age < 18 or age > 100:
-        return "Guardrail Violation: Khách hàng phải từ 18 đến 100 tuổi."
+        return "Guardrail Violation: Customer must be between 18 and 100 years old."
     if credit_amount <= 0 or credit_amount > 500000:
-        return "Guardrail Violation: Số tiền vay không hợp lệ (phải > 0 và <= 500,000)."
+        return "Guardrail Violation: Invalid loan amount (must be > 0 and <= 500,000)."
     if duration < 1 or duration > 120:
-        return "Guardrail Violation: Thời hạn vay phải từ 1 đến 120 tháng."
+        return "Guardrail Violation: Loan duration must be between 1 and 120 months."
     return None
 
 
 def load_production_model():
-    """Tải mô hình từ MLflow Model Registry."""
+    """Load model from MLflow Model Registry."""
     try:
         mlflow.set_tracking_uri(model_state["mlflow_uri"])
         model_uri = f"models:/{model_state['model_name']}/{model_state['model_stage']}"
         model_state["model"] = mlflow.pyfunc.load_model(model_uri)
         model_state["version"] = model_state["model_stage"]
         MODEL_LOADED_GAUGE.set(1)
-        logger.info(f"Đã tải thành công mô hình {model_uri}")
+        logger.info(f"Successfully loaded model {model_uri}")
     except Exception as e:
         MODEL_LOADED_GAUGE.set(0)
-        logger.warning(f"Chưa tải được mô hình từ MLflow ({e}). Có thể chạy /reload-model sau khi train.")
+        logger.warning(f"Failed to load model from MLflow ({e}). You can run /reload-model after training.")
 
 
 @app.on_event("startup")
@@ -122,7 +122,7 @@ async def health_check():
 async def reload_model():
     load_production_model()
     if model_state["model"] is None:
-        raise HTTPException(status_code=503, detail="Không thể tải mô hình từ MLflow.")
+        raise HTTPException(status_code=503, detail="Failed to load model from MLflow.")
     return {"status": "reloaded", "model_version": model_state["version"]}
 
 
@@ -130,7 +130,7 @@ async def reload_model():
 async def predict(request: PredictionRequest):
     start_time = time.time()
 
-    # 1. Kiểm tra Guardrails
+    # 1. Check Guardrails
     guardrail_error = apply_credit_guardrails(request.features)
     if guardrail_error:
         API_ERROR_COUNTER.labels(error_type="guardrail_rejected").inc()
@@ -138,24 +138,24 @@ async def predict(request: PredictionRequest):
 
     if model_state["model"] is None:
         API_ERROR_COUNTER.labels(error_type="model_not_loaded").inc()
-        raise HTTPException(status_code=503, detail="Mô hình chưa sẵn sàng.")
+        raise HTTPException(status_code=503, detail="Model is not ready.")
 
     try:
         input_df = pd.DataFrame([request.features], columns=FEATURE_NAMES)
-        # Truy cập pipeline bên dưới pyfunc để lấy xác suất
+        # Access pipeline underneath pyfunc to get probability
         raw_model = model_state["model"]._model_impl.sklearn_model
         probs = raw_model.predict_proba(input_df)[0]
         pred_class = int(np.argmax(probs))
         risk_prob = float(probs[1])
         confidence = float(np.max(probs))
 
-        # Thiết kế trải nghiệm người dùng theo Forcefulness Spectrum (S02)
+        # User experience design according to Forcefulness Spectrum (S02)
         if risk_prob >= 0.75:
-            action = "REJECT (Tự động từ chối do rủi ro vỡ nợ rất cao)"
+            action = "REJECT (Automatically rejected due to very high default risk)"
         elif risk_prob >= 0.40:
-            action = "HUMAN_REVIEW (Chuyển chuyên viên tín dụng thẩm định thêm)"
+            action = "HUMAN_REVIEW (Escalate to credit officer for further review)"
         else:
-            action = "APPROVE (Đủ điều kiện duyệt vay tự động)"
+            action = "APPROVE (Eligible for automatic loan approval)"
 
         latency = time.time() - start_time
         PREDICTION_LATENCY.observe(latency)
@@ -181,9 +181,9 @@ async def predict(request: PredictionRequest):
 
 @app.post("/explain")
 async def explain_prediction(request: PredictionRequest) -> Dict:
-    """Endpoint Responsible AI: Giải thích mức độ đóng góp của từng đặc trưng (Feature Attribution)."""
+    """Responsible AI Endpoint: Explain the contribution of each feature (Feature Attribution)."""
     if model_state["model"] is None:
-        raise HTTPException(status_code=503, detail="Mô hình chưa sẵn sàng.")
+        raise HTTPException(status_code=503, detail="Model is not ready.")
 
     input_df = pd.DataFrame([request.features], columns=FEATURE_NAMES)
     raw_pipeline = model_state["model"]._model_impl.sklearn_model
@@ -198,7 +198,7 @@ async def explain_prediction(request: PredictionRequest) -> Dict:
     else:
         importances = np.ones(len(FEATURE_NAMES)) / len(FEATURE_NAMES)
 
-    # Điểm tác động cục bộ (Local contribution score)
+    # Local contribution score
     contributions = {
         FEATURE_NAMES[i]: round(float(scaled_x[i] * importances[i]), 4)
         for i in range(len(FEATURE_NAMES))

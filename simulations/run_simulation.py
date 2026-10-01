@@ -33,7 +33,7 @@ def generate_sample(drift_magnitude: float = 0.0):
 
 
 def run(scenario: str, iterations: int, api_url: str, evidently_url: str):
-    print(f"Bắt đầu chạy kịch bản '{scenario}' ({iterations} requests)...")
+    print(f"Starting scenario '{scenario}' ({iterations} requests)...")
     for i in range(iterations):
         if scenario == "normal":
             drift = 0.0
@@ -59,9 +59,9 @@ def run(scenario: str, iterations: int, api_url: str, evidently_url: str):
                     timeout=5
                 )
         except Exception as e:
-            print(f"Request {i} lỗi: {e}")
+            print(f"Request {i} error: {e}")
         time.sleep(0.1)
-    print("Hoàn tất kịch bản giả lập!")
+    print("Simulation scenario completed!")
 
 
 if __name__ == "__main__":

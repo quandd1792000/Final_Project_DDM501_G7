@@ -20,7 +20,7 @@ DRIFT_SHARE_GAUGE = Gauge("evidently_share_of_drifted_columns", "Share of drifte
 COLUMN_DRIFT_GAUGE = Gauge("evidently_column_drift_score", "KS-test p-value / drift score per feature", ["column_name"])
 SAMPLES_ANALYZED = Counter("evidently_samples_analyzed_total", "Total samples analyzed for drift")
 
-# Khởi tạo dữ liệu tham chiếu (Reference Data) và bộ đệm (Current Window)
+# Initialize Reference Data and Current Window buffer
 reference_df: pd.DataFrame = pd.DataFrame()
 current_buffer: List[Dict[str, float]] = []
 WINDOW_SIZE = int(os.getenv("DRIFT_WINDOW_SIZE", "50"))
@@ -39,7 +39,7 @@ def load_reference():
     if os.path.exists(ref_path):
         reference_df = pd.read_csv(ref_path)[FEATURE_NAMES]
     else:
-        # Khởi tạo phân phối chuẩn mặc định nếu chưa có file CSV
+        # Initialize default normal distribution if CSV file does not exist
         np.random.seed(42)
         reference_df = pd.DataFrame({
             "duration": np.random.normal(20.9, 12.0, 500),
@@ -64,7 +64,7 @@ def collect_and_evaluate(sample: MonitoringSample):
         for col in FEATURE_NAMES:
             if col in current_df.columns and col in reference_df.columns:
                 stat, p_value = ks_2samp(reference_df[col], current_df[col])
-                # Lưu độ lệch thống kê KS (càng gần 1.0 càng lệch mạnh)
+                # Save KS statistical deviation (closer to 1.0 means stronger deviation)
                 COLUMN_DRIFT_GAUGE.labels(column_name=col).set(float(stat))
                 if p_value < 0.05:
                     drifted_cols += 1

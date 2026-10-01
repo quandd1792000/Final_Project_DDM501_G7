@@ -13,7 +13,7 @@ from scripts.training import evaluate_fairness
 client = TestClient(app)
 
 
-# 1. UNIT TESTS: Kiểm tra logic Guardrails
+# 1. UNIT TESTS: Check Guardrails logic
 class TestUnitGuardrails:
     def test_valid_applicant_passes(self):
         valid_features = [24.0, 3500.0, 3.0, 2.0, 35.0, 1.0, 1.0, 1.0]
@@ -29,7 +29,7 @@ class TestUnitGuardrails:
         assert apply_credit_guardrails(negative_loan) is not None
 
 
-# 2. DATA QUALITY TESTS: Kiểm tra tính toàn vẹn của Schema và miền giá trị
+# 2. DATA QUALITY TESTS: Check Schema integrity and value domains
 class TestDataQuality:
     def test_feature_schema_completeness(self):
         assert len(FEATURE_NAMES) == 8
@@ -43,7 +43,7 @@ class TestDataQuality:
         assert 18.0 <= f_dict["age"] <= 100.0
 
 
-# 3. MODEL VALIDATION & FAIRNESS TESTS: Kiểm tra chất lượng mô hình & tính công bằng
+# 3. MODEL VALIDATION & FAIRNESS TESTS: Check model quality & fairness
 class TestModelValidation:
     def test_model_pipeline_sanity_and_fairness(self):
         np.random.seed(42)
@@ -63,15 +63,15 @@ class TestModelValidation:
         pipe.fit(X_dummy, y_dummy)
         preds = pipe.predict(X_dummy)
 
-        # Kiểm tra độ chính xác tối thiểu (Sanity check - Rule #9 of ML)
+        # Check minimum accuracy (Sanity check - Rule #9 of ML)
         assert (preds == y_dummy).mean() > 0.70
 
-        # Kiểm tra hàm đánh giá Fairness hoạt động đúng
+        # Check if Fairness evaluation function works correctly
         fairness = evaluate_fairness(X_dummy, preds)
         assert "fairness_disparate_impact_age" in fairness
 
 
-# 4. INTEGRATION TESTS: Kiểm tra các API Endpoints
+# 4. INTEGRATION TESTS: Check API Endpoints
 class TestAPIIntegration:
     def test_health_endpoint(self):
         response = client.get("/health")

@@ -18,7 +18,7 @@ from sklearn.metrics import (
 
 warnings.filterwarnings("ignore")
 
-# Cấu hình kết nối MLflow & MinIO
+# Configure MLflow & MinIO connection
 os.environ.setdefault("MLFLOW_S3_ENDPOINT_URL", "http://localhost:9000")
 os.environ.setdefault("AWS_ACCESS_KEY_ID", "minioadmin")
 os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "minioadmin123")
@@ -40,8 +40,8 @@ FEATURE_NAMES = [
 
 
 def load_and_preprocess_credit_data(save_path="data/credit_reference.csv"):
-    """Tải dữ liệu thực tế German Credit từ OpenML và chuẩn hóa thành 8 cột số."""
-    print("1. Đang tải dữ liệu thực tế German Credit (credit-g) từ OpenML...")
+    """Load real German Credit data from OpenML and normalize to 8 numeric columns."""
+    print("1. Loading real German Credit data (credit-g) from OpenML...")
     dataset = fetch_openml(name="credit-g", version=1, as_frame=True, parser="auto")
     df_raw = dataset.frame
 
@@ -53,26 +53,26 @@ def load_and_preprocess_credit_data(save_path="data/credit_reference.csv"):
     df["age"] = df_raw["age"].astype(float)
     df["existing_credits"] = df_raw["existing_credits"].astype(float)
     df["num_dependents"] = df_raw["num_dependents"].astype(float)
-    # Mã hóa thuộc tính nhạy cảm: Nam = 1.0, Nữ = 0.0
+    # Encode sensitive attribute: Male = 1.0, Female = 0.0
     df["is_male"] = df_raw["personal_status"].astype(str).str.contains("male single|male mar|male div").astype(float)
 
-    # Nhãn: 'bad' (vỡ nợ) = 1, 'good' = 0
+    # Label: 'bad' (default) = 1, 'good' = 0
     df["target"] = (df_raw["class"] == "bad").astype(int)
 
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     df.to_csv(save_path, index=False)
-    print(f"   Đã lưu dữ liệu chuẩn hóa tại {save_path} ({len(df)} dòng).")
+    print(f"   Saved normalized data at {save_path} ({len(df)} rows).")
     return df
 
 
 def evaluate_fairness(X_test_df: pd.DataFrame, y_pred: np.ndarray) -> dict:
-    """Đánh giá tính công bằng (Responsible AI) theo độ tuổi và giới tính."""
-    # Tỷ lệ bị đánh giá rủi ro cao (y_pred == 1) ở nhóm trẻ (<30 tuổi) so với nhóm >=30 tuổi
+    """Evaluate fairness (Responsible AI) by age and gender."""
+    # High-risk evaluation rate (y_pred == 1) in young group (<30 years old) vs older group (>=30 years old)
     young_mask = X_test_df["age"] < 30
     rate_young = y_pred[young_mask].mean() if young_mask.sum() > 0 else 0.0
     rate_older = y_pred[~young_mask].mean() if (~young_mask).sum() > 0 else 0.0
 
-    # Disparate Impact Ratio (Tỷ lệ tác động khác biệt)
+    # Disparate Impact Ratio
     disparate_impact_age = (rate_older / rate_young) if rate_young > 0 else 1.0
 
     male_mask = X_test_df["is_male"] == 1.0
@@ -101,7 +101,7 @@ def train_and_track():
         X, y, test_size=0.2, random_state=42, stratify=y
     )
 
-    # Danh sách các cấu hình thử nghiệm (Multiple Experiments)
+    # List of experiment configurations (Multiple Experiments)
     candidate_models = [
         ("LogisticRegression_Baseline", LogisticRegression(max_iter=1000, class_weight="balanced", random_state=42)),
         ("RandomForest_100trees", RandomForestClassifier(n_estimators=100, max_depth=8, class_weight="balanced", random_state=42)),
@@ -115,7 +115,7 @@ def train_and_track():
 
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
-    print("\n2. Bắt đầu huấn luyện và theo dõi thử nghiệm trên MLflow...")
+    print("\n2. Starting training and tracking experiments on MLflow...")
     for run_name, estimator in candidate_models:
         with mlflow.start_run(run_name=run_name) as run:
             pipeline = Pipeline([
@@ -140,16 +140,16 @@ def train_and_track():
                 "test_roc_auc": float(roc_auc_score(y_test, y_prob)),
             }
 
-            # Bổ sung chỉ số Responsible AI (Fairness)
+            # Add Responsible AI (Fairness) metrics
             fairness_metrics = evaluate_fairness(X_test, y_pred)
             metrics.update(fairness_metrics)
 
-            # Log parameters & metrics lên MLflow
+            # Log parameters & metrics to MLflow
             mlflow.log_param("model_family", estimator.__class__.__name__)
             mlflow.log_params(estimator.get_params())
             mlflow.log_metrics(metrics)
 
-            # Log mô hình kèm Signature
+            # Log model with Signature
             signature = mlflow.models.infer_signature(X_train, pipeline.predict(X_train))
             mlflow.sklearn.log_model(
                 sk_model=pipeline,
@@ -165,8 +165,8 @@ def train_and_track():
                 best_run_id = run.info.run_id
                 best_model_name = run_name
 
-    # Đăng ký mô hình chiến thắng lên Model Registry & chuyển sang Production
-    print(f"\n3. Mô hình chiến thắng: {best_model_name} (ROC-AUC = {best_roc_auc:.4f})")
+    # Register winning model to Model Registry & transition to Production
+    print(f"\n3. Winning model: {best_model_name} (ROC-AUC = {best_roc_auc:.4f})")
     model_uri = f"runs:/{best_run_id}/model"
     mv = mlflow.register_model(model_uri=model_uri, name=MODEL_NAME)
 
@@ -176,7 +176,7 @@ def train_and_track():
         stage="Production",
         archive_existing_versions=True
     )
-    print(f"   Đã chuyển {MODEL_NAME} (version {mv.version}) sang trạng thái 'Production'!")
+    print(f"   Transitioned {MODEL_NAME} (version {mv.version}) to 'Production' stage!")
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # 1. Cơ sở dữ liệu lưu metadata của MLflow
+  # 1. Database to store MLflow metadata
   postgres:
     image: postgres:13
     environment:
@@ -15,7 +15,7 @@ services:
       interval: 5s
       retries: 5
 
-  # 2. Kho lưu trữ S3 (MinIO) để lưu file mô hình (Artifacts)
+  # 2. S3 Storage (MinIO) to store model artifacts
   minio:
     image: minio/minio
     command: server /data --console-address ":9001"
@@ -26,7 +26,7 @@ services:
       - "9000:9000"
       - "9001:9001"
 
-  # 3. Tự động tạo bucket 'mlflow' trong MinIO
+  # 3. Automatically create 'mlflow' bucket in MinIO
   create-bucket:
     image: minio/mc
     depends_on:
@@ -51,7 +51,7 @@ services:
       postgres:
         condition: service_healthy
 
-  # 5. Dịch vụ Dự đoán (Credit Risk API)
+  # 5. Prediction Service (Credit Risk API)
   api:
     build:
       context: .
@@ -63,12 +63,12 @@ services:
       - AWS_ACCESS_KEY_ID=minioadmin
       - AWS_SECRET_ACCESS_KEY=minioadmin123
       - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
-      - MODEL_NAME=credit_risk_classifier # Tên mô hình khớp với lúc training
+      - MODEL_NAME=credit_risk_classifier # Model name matching training phase
       - MODEL_STAGE=Production
     depends_on:
       - mlflow
 
-  # 6. Dịch vụ Giám sát Data Drift (Evidently)
+  # 6. Data Drift Monitoring Service (Evidently)
   evidently:
     build:
       context: .
@@ -76,7 +76,7 @@ services:
     ports:
       - "8001:8001"
 
-  # 7. Máy chủ gom Metrics (Prometheus)
+  # 7. Metrics Server (Prometheus)
   prometheus:
     image: prom/prometheus
     volumes:
@@ -85,7 +85,7 @@ services:
     ports:
       - "9090:9090"
 
-  # 8. Bảng điều khiển (Grafana)
+  # 8. Dashboard (Grafana)
   grafana:
     image: grafana/grafana
     ports:
