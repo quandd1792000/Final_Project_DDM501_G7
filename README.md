@@ -7,21 +7,23 @@ An end-to-end Machine Learning Operations (MLOps) architecture designed to train
 ## 🚀 Features
 
 * **Model Serving (FastAPI)**: Robust REST API to serve predictions in real-time, fortified with input guardrails.
-* **Experiment Tracking (MLflow)**: Full integration with MLflow for tracking parameters, metrics, and managing the model lifecycle (Backend: PostgreSQL, Artifacts: MinIO S3).
-* **Data Drift Monitoring (Evidently AI)**: Automated detection of data drift and data quality degradation.
+* **Experiment Tracking & Orchestration (MLflow + Airflow)**: Full integration with MLflow for tracking parameters and metrics, and Airflow for automated model training and retraining pipelines (Backend: PostgreSQL, Artifacts: MinIO S3).
+* **Data Drift Monitoring (Evidently AI)**: Automated detection of data drift and data quality degradation running asynchronously in the background.
 * **System Observability (Prometheus & Grafana)**: Interactive dashboards for monitoring real-time API performance, model metrics, and system health.
-* **CI/CD Automation (GitHub Actions)**: Automated code linting (`flake8`) and a comprehensive testing suite (`pytest`) ensuring model sanity and data fairness.
+* **Automated Alerting (Alertmanager + Discord)**: Real-time alerting for critical system events (e.g., High API Error Rate, Model Not Loaded) delivered directly to a Discord channel.
+* **CI/CD Automation (GitHub Actions + Watchtower)**: Automated code linting (`flake8`), testing (`pytest`), Docker image building/pushing to GHCR, and continuous deployment using Watchtower.
 
 ## 📁 Project Structure
 
 ```bash
 .
 ├── .github/workflows/   # CI/CD pipelines (GitHub Actions)
+├── airflow/             # Airflow orchestration configuration and Dockerfile
 ├── api/                 # FastAPI service for the prediction endpoints
-├── config/              # Prometheus, Grafana, and AlertManager configurations
+├── config/              # Prometheus, Grafana, Alertmanager, and Alert Rules configurations
+├── dags/                # Airflow DAGs for model training
 ├── evidently/           # Data Drift tracking and ML monitoring logic
 ├── scripts/             # Model training and deployment scripts
-├── simulations/         # Synthetic data generation for testing
 ├── tests/               # Unit, data quality, integration, and fairness tests
 ├── docker-compose.yml   # Multi-container Docker setup
 └── requirements.txt     # Python dependencies
@@ -46,12 +48,14 @@ docker-compose up -d
 
 This command spins up the following services:
 * **Prediction API**: `http://localhost:8000` (Swagger UI: `http://localhost:8000/docs`)
+* **Airflow Orchestrator**: `http://localhost:8080` (Trigger automated training here)
 * **MLflow Tracking UI**: `http://localhost:5000`
 * **MinIO Object Storage**: `http://localhost:9001` (User: `minioadmin` / Pass: `minioadmin123`)
 * **Evidently AI Dashboard**: `http://localhost:8001`
 * **Grafana Dashboards**: `http://localhost:3000` (User: `admin` / Pass: `admin`)
 * **Prometheus**: `http://localhost:9090`
-* **PostgreSQL**: `localhost:5432`
+* **Alertmanager**: `http://localhost:9093`
+* **Watchtower**: Automatically polls GHCR for new images and updates containers dynamically.
 
 ### 2. Run Tests Locally
 
@@ -69,16 +73,19 @@ PYTHONPATH=. pytest tests/ -v
 
 - **Health Check**: `GET http://localhost:8000/health`
 - **Predict**: `POST http://localhost:8000/predict`
-  - Accepts a JSON payload containing applicant features.
+  - Accepts a JSON payload containing applicant features. Forwards prediction data to Evidently.
 - **Metrics**: `GET http://localhost:8000/metrics`
   - Scraped by Prometheus to monitor application performance and request volume.
 
 ## 🤝 CI/CD Pipeline
 
-This project uses **GitHub Actions** for Continuous Integration. Every push or pull request to the `main` or `develop` branch triggers a workflow that:
-1. Provisions a Python 3.11 environment.
-2. Lints the source code to enforce clean code standards (`flake8`).
-3. Executes the full `pytest` suite ensuring Code Coverage remains high.
+This project uses **GitHub Actions** and **Watchtower** for Continuous Integration and Continuous Deployment (CI/CD):
+1. **CI**: Every push to the `main` branch triggers a workflow that:
+   - Provisions a Python 3.11 environment.
+   - Lints the source code to enforce clean code standards (`flake8`).
+   - Executes the full `pytest` suite ensuring Code Coverage.
+   - Builds Docker images for the API and Evidently services and pushes them to GitHub Container Registry (GHCR).
+2. **CD**: Watchtower continuously polls GHCR (every 60 seconds). Once a new image is pushed, Watchtower automatically downloads the image, stops the old containers, and restarts the new ones with zero downtime.
 
 ---
 *Created for the DDM501 Module - Group 7.*
