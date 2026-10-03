@@ -6,7 +6,8 @@ from typing import List, Optional, Dict
 import numpy as np
 import pandas as pd
 import mlflow.pyfunc
-from fastapi import FastAPI, HTTPException, Response
+import requests
+from fastapi import FastAPI, HTTPException, Response, BackgroundTasks
 from pydantic import BaseModel, Field
 from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 
@@ -26,18 +27,21 @@ FEATURE_NAMES = [
 
 CLASS_NAMES = ["good_credit", "bad_credit_risk"]
 
-# Prometheus Metrics (Similar to sample project structure to match Grafana)
-PREDICTION_COUNTER = Counter(
-    "ml_predictions_total", "Total number of credit predictions", ["predicted_class", "model_version"]
+# Prometheus Metrics (Matching Grafana Dashboard)
+API_REQUESTS = Counter(
+    "api_requests_total", "Total API requests", ["method", "endpoint", "status"]
 )
-PREDICTION_LATENCY = Histogram(
-    "ml_prediction_duration_seconds", "Prediction latency in seconds"
+API_LATENCY = Histogram(
+    "api_request_latency_seconds", "API request latency", ["method", "endpoint"]
 )
-CONFIDENCE_HISTOGRAM = Histogram(
-    "ml_prediction_confidence", "Prediction confidence distribution", buckets=[0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99, 1.0]
+MODEL_PREDICTIONS = Counter(
+    "model_predictions_total", "Total number of credit predictions", ["model_name", "model_version"]
 )
-API_ERROR_COUNTER = Counter(
-    "ml_api_errors_total", "Total API & Guardrail errors", ["error_type"]
+MODEL_LATENCY = Histogram(
+    "model_prediction_latency_seconds", "Prediction latency in seconds", ["model_name"]
+)
+MODEL_VALUES = Histogram(
+    "model_prediction_value", "Prediction confidence distribution", buckets=[0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99, 1.0]
 )
 MODEL_LOADED_GAUGE = Gauge(
     "ml_model_loaded", "Whether the production model is loaded (1=yes, 0=no)"
@@ -45,8 +49,8 @@ MODEL_LOADED_GAUGE = Gauge(
 
 app = FastAPI(
     title="Credit Risk Assessment MLOps API",
-    description="Production-ready ML Service with Guardrails, Prometheus Monitoring, and Responsible AI Explainability",
-    version="1.0.0"
+    description="Production-ready ML Service with Guardrails, Prometheus Monitoring, and Responsible AI Explainability. (CI/CD Auto-Update Test Successful!)",
+    version="1.0.1"
 )
 
 # Global variable holding the model
@@ -127,18 +131,32 @@ async def reload_model():
     return {"status": "reloaded", "model_version": model_state["version"]}
 
 
+def send_to_evidently(features: List[float], prediction: int, confidence: float):
+    """Send prediction data to Evidently service for drift monitoring in background."""
+    try:
+        feature_dict = dict(zip(FEATURE_NAMES, features))
+        payload = {
+            "features": feature_dict,
+            "prediction": prediction,
+            "confidence": confidence
+        }
+        # In docker-compose, the evidently service is accessible at evidently:8001
+        requests.post("http://evidently:8001/iterate", json=payload, timeout=2.0)
+    except Exception as e:
+        logger.warning(f"Failed to send data to Evidently: {e}")
+
 @app.post("/predict", response_model=PredictionResponse)
-async def predict(request: PredictionRequest):
+async def predict(request: PredictionRequest, background_tasks: BackgroundTasks):
     start_time = time.time()
 
     # 1. Check Guardrails
     guardrail_error = apply_credit_guardrails(request.features)
     if guardrail_error:
-        API_ERROR_COUNTER.labels(error_type="guardrail_rejected").inc()
+        API_REQUESTS.labels(method="POST", endpoint="/predict", status="422").inc()
         raise HTTPException(status_code=422, detail=guardrail_error)
 
     if model_state["model"] is None:
-        API_ERROR_COUNTER.labels(error_type="model_not_loaded").inc()
+        API_REQUESTS.labels(method="POST", endpoint="/predict", status="503").inc()
         raise HTTPException(status_code=503, detail="Model is not ready.")
 
     try:
@@ -159,12 +177,20 @@ async def predict(request: PredictionRequest):
             action = "APPROVE (Eligible for automatic loan approval)"
 
         latency = time.time() - start_time
-        PREDICTION_LATENCY.observe(latency)
-        CONFIDENCE_HISTOGRAM.observe(confidence)
-        PREDICTION_COUNTER.labels(
-            predicted_class=CLASS_NAMES[pred_class],
+        
+        # Log to Prometheus
+        API_REQUESTS.labels(method="POST", endpoint="/predict", status="200").inc()
+        API_LATENCY.labels(method="POST", endpoint="/predict").observe(latency)
+        
+        MODEL_PREDICTIONS.labels(
+            model_name=str(model_state["model_name"]),
             model_version=str(model_state["version"])
         ).inc()
+        MODEL_LATENCY.labels(model_name=str(model_state["model_name"])).observe(latency)
+        MODEL_VALUES.observe(confidence)
+
+        # Forward to evidently for drift monitoring
+        background_tasks.add_task(send_to_evidently, request.features, pred_class, confidence)
 
         return PredictionResponse(
             prediction=pred_class,
@@ -176,42 +202,50 @@ async def predict(request: PredictionRequest):
             latency_ms=round(latency * 1000, 2)
         )
     except Exception as e:
-        API_ERROR_COUNTER.labels(error_type="prediction_error").inc()
+        API_REQUESTS.labels(method="POST", endpoint="/predict", status="500").inc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/explain")
 async def explain_prediction(request: PredictionRequest) -> Dict:
+    start_time = time.time()
     """Responsible AI Endpoint: Explain the contribution of each feature (Feature Attribution)."""
     if model_state["model"] is None:
+        API_REQUESTS.labels(method="POST", endpoint="/explain", status="503").inc()
         raise HTTPException(status_code=503, detail="Model is not ready.")
 
-    input_df = pd.DataFrame([request.features], columns=FEATURE_NAMES)
-    raw_pipeline = model_state["model"]._model_impl.sklearn_model
-    scaler = raw_pipeline.named_steps["scaler"]
-    classifier = raw_pipeline.named_steps["classifier"]
+    try:
+        input_df = pd.DataFrame([request.features], columns=FEATURE_NAMES)
+        raw_pipeline = model_state["model"]._model_impl.sklearn_model
+        scaler = raw_pipeline.named_steps["scaler"]
+        classifier = raw_pipeline.named_steps["classifier"]
 
-    scaled_x = scaler.transform(input_df)[0]
-    if hasattr(classifier, "feature_importances_"):
-        importances = classifier.feature_importances_
-    elif hasattr(classifier, "coef_"):
-        importances = np.abs(classifier.coef_[0])
-    else:
-        importances = np.ones(len(FEATURE_NAMES)) / len(FEATURE_NAMES)
+        scaled_x = scaler.transform(input_df)[0]
+        if hasattr(classifier, "feature_importances_"):
+            importances = classifier.feature_importances_
+        elif hasattr(classifier, "coef_"):
+            importances = np.abs(classifier.coef_[0])
+        else:
+            importances = np.ones(len(FEATURE_NAMES)) / len(FEATURE_NAMES)
 
-    # Local contribution score
-    contributions = {
-        FEATURE_NAMES[i]: round(float(scaled_x[i] * importances[i]), 4)
-        for i in range(len(FEATURE_NAMES))
-    }
-    sorted_contrib = dict(sorted(contributions.items(), key=lambda item: abs(item[1]), reverse=True))
+        # Local contribution score
+        contributions = {
+            FEATURE_NAMES[i]: round(float(scaled_x[i] * importances[i]), 4)
+            for i in range(len(FEATURE_NAMES))
+        }
+        sorted_contrib = dict(sorted(contributions.items(), key=lambda item: abs(item[1]), reverse=True))
 
-    return {
-        "feature_contributions": sorted_contrib,
-        "top_risk_driver": next(iter(sorted_contrib)),
-        "explanation_method": "Local Feature Attribution (SHAP/Importance-weighted)"
-    }
+        API_REQUESTS.labels(method="POST", endpoint="/explain", status="200").inc()
+        API_LATENCY.labels(method="POST", endpoint="/explain").observe(time.time() - start_time)
 
+        return {
+            "feature_contributions": sorted_contrib,
+            "top_risk_driver": next(iter(sorted_contrib)),
+            "explanation_method": "Local Feature Attribution (SHAP/Importance-weighted)"
+        }
+    except Exception as e:
+        API_REQUESTS.labels(method="POST", endpoint="/explain", status="500").inc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/metrics")
 async def metrics():

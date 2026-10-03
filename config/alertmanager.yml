@@ -10,12 +10,11 @@ route:
 
 receivers:
   - name: 'discord'
-    slack_configs:
-      # Append /slack to your Discord webhook URL
-      - api_url: 'https://discord.com/api/webhooks/1553691940317306890/VzUECxU71ni5kLSLOqQ4tz5EkPfm4rZ0FQtp0nBmY_PxQEP1OBl1bdr9-zf5WkGbf2Vb/slack'
+    discord_configs:
+      - webhook_url: 'https://discord.com/api/webhooks/1553691940317306890/VzUECxU71ni5kLSLOqQ4tz5EkPfm4rZ0FQtp0nBmY_PxQEP1OBl1bdr9-zf5WkGbf2Vb'
         title: '[{{ .Status | toUpper }}] {{ .GroupLabels.alertname }}'
-        text: >-
+        message: >-
           {{ range .Alerts }}
-            *Alert:* {{ .Annotations.summary }}
-            *Details:* {{ .Annotations.description }}
+            **Alert:** {{ .Annotations.summary }}
+            **Details:** {{ .Annotations.description }}
           {{ end }}

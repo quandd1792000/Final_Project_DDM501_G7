@@ -1,0 +1,46 @@
+groups:
+  - name: mlops_production_alerts
+    rules:
+      # 1. API Error Rate Alert (> 5% errors in 1 minute)
+      - alert: HighAPIErrorRate
+        expr: >
+          sum(rate(api_requests_total{status=~"5.."}[1m])) 
+          / 
+          sum(rate(api_requests_total[1m])) > 0.05
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical: High API Error Rate ({{ $value | humanizePercentage }})"
+          description: "The credit risk API is experiencing a high rate of 5xx errors. Please check the API container logs immediately."
+
+      # 2. API Latency Alert (P95 Latency > 0.5s for 5 minutes)
+      - alert: HighAPILatency
+        expr: >
+          histogram_quantile(0.95, sum(rate(api_request_latency_seconds_bucket[5m])) by (le)) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Warning: High API Latency ({{ $value }}s)"
+          description: "The 95th percentile latency of the prediction API is above 500ms for the last 5 minutes."
+
+      # 3. Model Not Loaded Alert
+      - alert: ModelNotLoaded
+        expr: ml_model_loaded == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical: ML Model Not Loaded"
+          description: "The production model failed to load into memory. All predictions will return 503 Service Unavailable."
+
+      # 4. Zero Prediction Traffic (Optional / Early Warning)
+      - alert: ZeroPredictionTraffic
+        expr: rate(api_requests_total[5m]) == 0
+        for: 15m
+        labels:
+          severity: info
+        annotations:
+          summary: "Info: No API traffic for 15 minutes"
+          description: "The prediction API has received 0 requests in the last 15 minutes. This might be normal during off-peak hours, but could indicate upstream issues."

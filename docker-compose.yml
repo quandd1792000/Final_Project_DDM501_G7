@@ -112,9 +112,37 @@ services:
     # 10. Tự động cập nhật CD (Watchtower)
   watchtower:
     image: containrrr/watchtower
+    environment:
+      - DOCKER_API_VERSION=1.41
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     command: --interval 60 api evidently
     # (--interval 60 nghĩa là cứ 60 giây nó sẽ lên kiểm tra Github 1 lần. 
     # 'api evidently' là tên 2 service nó cần theo dõi để tự động update)
 
+
+  # 11. Airflow Orchestration
+  airflow:
+    build:
+      context: .
+      dockerfile: airflow/Dockerfile
+    command: standalone
+    environment:
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
+      - _AIRFLOW_DB_UPGRADE=True
+      - _AIRFLOW_WWW_USER_CREATE=True
+      - _AIRFLOW_WWW_USER_USERNAME=admin
+      - _AIRFLOW_WWW_USER_PASSWORD=admin
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin123
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./scripts:/opt/airflow/scripts
+      - ./data:/opt/airflow/data
+    depends_on:
+      - mlflow
