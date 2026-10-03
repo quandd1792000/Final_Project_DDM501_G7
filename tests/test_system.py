@@ -80,7 +80,7 @@ class TestAPIIntegration:
     def test_metrics_endpoint_exposes_prometheus(self):
         response = client.get("/metrics")
         assert response.status_code == 200
-        assert "ml_predictions_total" in response.text
+        assert "model_predictions_total" in response.text
 
     def test_guardrail_blocks_invalid_request_via_api(self):
         bad_payload = {"features": [12.0, -100.0, 2.0, 2.0, 15.0, 1.0, 1.0, 1.0]}
