@@ -7,7 +7,7 @@ import os
 # Ensure the scripts module can be imported
 sys.path.append("/opt/airflow")
 
-from scripts.training import train_and_track
+from scripts.training import train_and_track  # noqa: E402
 
 default_args = {
     'owner': 'mlops_team',
