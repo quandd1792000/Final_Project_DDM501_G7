@@ -49,7 +49,8 @@ MODEL_LOADED_GAUGE = Gauge(
 
 app = FastAPI(
     title="Credit Risk Assessment MLOps API",
-    description="Production-ready ML Service with Guardrails, Prometheus Monitoring, and Responsible AI Explainability. (CI/CD Auto-Update Test Successful!)",
+    description=("Production-ready ML Service with Guardrails, Prometheus Monitoring, "
+                 "and Responsible AI Explainability. (CI/CD Auto-Update Test Successful!)"),
     version="1.0.1"
 )
 
@@ -145,6 +146,7 @@ def send_to_evidently(features: List[float], prediction: int, confidence: float)
     except Exception as e:
         logger.warning(f"Failed to send data to Evidently: {e}")
 
+
 @app.post("/predict", response_model=PredictionResponse)
 async def predict(request: PredictionRequest, background_tasks: BackgroundTasks):
     start_time = time.time()
@@ -177,11 +179,11 @@ async def predict(request: PredictionRequest, background_tasks: BackgroundTasks)
             action = "APPROVE (Eligible for automatic loan approval)"
 
         latency = time.time() - start_time
-        
+
         # Log to Prometheus
         API_REQUESTS.labels(method="POST", endpoint="/predict", status="200").inc()
         API_LATENCY.labels(method="POST", endpoint="/predict").observe(latency)
-        
+
         MODEL_PREDICTIONS.labels(
             model_name=str(model_state["model_name"]),
             model_version=str(model_state["version"])
@@ -246,6 +248,7 @@ async def explain_prediction(request: PredictionRequest) -> Dict:
     except Exception as e:
         API_REQUESTS.labels(method="POST", endpoint="/explain", status="500").inc()
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/metrics")
 async def metrics():
