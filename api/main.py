@@ -6,6 +6,7 @@ from typing import List, Optional, Dict
 import numpy as np
 import pandas as pd
 import mlflow.pyfunc
+from mlflow.tracking import MlflowClient
 import requests
 from fastapi import FastAPI, HTTPException, Response, BackgroundTasks
 from pydantic import BaseModel, Field
@@ -102,9 +103,18 @@ def load_production_model():
         mlflow.set_tracking_uri(model_state["mlflow_uri"])
         model_uri = f"models:/{model_state['model_name']}/{model_state['model_stage']}"
         model_state["model"] = mlflow.pyfunc.load_model(model_uri)
-        model_state["version"] = model_state["model_stage"]
+        
+        # Get actual numeric version
+        client = MlflowClient()
+        latest_versions = client.get_latest_versions(name=model_state['model_name'], stages=[model_state['model_stage']])
+        if latest_versions:
+            actual_version = latest_versions[0].version
+            model_state["version"] = f"v{actual_version}"
+        else:
+            model_state["version"] = model_state["model_stage"]
+            
         MODEL_LOADED_GAUGE.set(1)
-        logger.info(f"Successfully loaded model {model_uri}")
+        logger.info(f"Successfully loaded model {model_uri} (Version: {model_state['version']})")
     except Exception as e:
         MODEL_LOADED_GAUGE.set(0)
         logger.warning(f"Failed to load model from MLflow ({e}). You can run /reload-model after training.")

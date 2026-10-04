@@ -95,7 +95,7 @@
             "type": "prometheus",
             "uid": "prometheus-datasource"
           },
-          "expr": "evidently_data_drift_detected",
+          "expr": "evidently_dataset_drift_detected",
           "refId": "A"
         }
       ],
@@ -167,7 +167,7 @@
             "type": "prometheus",
             "uid": "prometheus-datasource"
           },
-          "expr": "evidently_drifted_features_count",
+          "expr": "(evidently_share_of_drifted_columns * 8)",
           "refId": "A"
         }
       ],
@@ -238,7 +238,7 @@
             "type": "prometheus",
             "uid": "prometheus-datasource"
           },
-          "expr": "evidently_drift_score",
+          "expr": "evidently_share_of_drifted_columns",
           "refId": "A"
         }
       ],
@@ -329,7 +329,7 @@
             "type": "prometheus",
             "uid": "prometheus-datasource"
           },
-          "expr": "evidently_analysis_total",
+          "expr": "evidently_samples_analyzed_total",
           "legendFormat": "Total Analyses",
           "refId": "A"
         }
@@ -440,7 +440,7 @@
             "type": "prometheus",
             "uid": "prometheus-datasource"
           },
-          "expr": "evidently_data_drift_detected",
+          "expr": "evidently_dataset_drift_detected",
           "legendFormat": "Drift Status",
           "refId": "A"
         }
@@ -540,7 +540,7 @@
             "type": "prometheus",
             "uid": "prometheus-datasource"
           },
-          "expr": "evidently_drifted_features_count",
+          "expr": "(evidently_share_of_drifted_columns * 8)",
           "legendFormat": "Drifted Features",
           "refId": "A"
         }
@@ -572,12 +572,12 @@
                 "0": {
                   "color": "green",
                   "index": 0,
-                  "text": "✓ No Drift"
+                  "text": "âœ“ No Drift"
                 },
                 "1": {
                   "color": "red",
                   "index": 1,
-                  "text": "⚠ Drifted"
+                  "text": "âš  Drifted"
                 }
               },
               "type": "value"
@@ -638,7 +638,7 @@
             "type": "prometheus",
             "uid": "prometheus-datasource"
           },
-          "expr": "evidently_feature_drift",
+          "expr": "evidently_column_drift_score",
           "format": "table",
           "instant": true,
           "refId": "A"
@@ -766,7 +766,7 @@
             "type": "prometheus",
             "uid": "prometheus-datasource"
           },
-          "expr": "evidently_drift_score",
+          "expr": "evidently_share_of_drifted_columns",
           "legendFormat": "Drift Score",
           "refId": "A"
         }
@@ -960,7 +960,7 @@
             "type": "prometheus",
             "uid": "prometheus-datasource"
           },
-          "expr": "rate(evidently_analysis_total[5m]) * 60",
+          "expr": "rate(evidently_samples_analyzed_total[5m]) * 60",
           "legendFormat": "Analyses/min",
           "refId": "A"
         }
