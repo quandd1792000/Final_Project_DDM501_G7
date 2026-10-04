@@ -54,7 +54,7 @@ def load_and_preprocess_credit_data(save_path="data/credit_reference.csv"):
     df["existing_credits"] = df_raw["existing_credits"].astype(float)
     df["num_dependents"] = df_raw["num_dependents"].astype(float)
     # Encode sensitive attribute: Male = 1.0, Female = 0.0
-    df["is_male"] = df_raw["personal_status"].astype(str).str.contains("male single|male mar|male div").astype(float)
+    df["is_male"] = df_raw["personal_status"].astype(str).str.startswith("male").astype(float)
 
     # Label: 'bad' (default) = 1, 'good' = 0
     df["target"] = (df_raw["class"] == "bad").astype(int)
