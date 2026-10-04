@@ -44,3 +44,13 @@ groups:
         annotations:
           summary: "Info: No API traffic for 15 minutes"
           description: "The prediction API has received 0 requests in the last 15 minutes. This might be normal during off-peak hours, but could indicate upstream issues."
+
+      # 5. Data Drift Alert (Evidently detected data distribution shift)
+      - alert: DatasetDriftDetected
+        expr: evidently_dataset_drift_detected == 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Warning: Data Drift Detected"
+          description: "The Evidently KS-Test engine has detected a significant structural shift in the incoming features (> 50% columns drifted). Please check the data pipeline or consider retraining the model."

@@ -60,6 +60,8 @@ def collect_and_evaluate(sample: MonitoringSample):
 
     if len(current_buffer) >= WINDOW_SIZE:
         current_df = pd.DataFrame(current_buffer[-WINDOW_SIZE:])
+        # Fix Memory Leak: Truncate buffer in-place to keep memory bounded
+        del current_buffer[:-WINDOW_SIZE]
         drifted_cols = 0
         for col in FEATURE_NAMES:
             if col in current_df.columns and col in reference_df.columns:

@@ -165,8 +165,8 @@ def train_and_track():
             print(f"   [{run_name}] CV ROC-AUC: {metrics['cv_roc_auc_mean']:.4f} | "
                   f"Test ROC-AUC: {metrics['test_roc_auc']:.4f} | Recall: {metrics['test_recall_default']:.4f}")
 
-            if metrics["test_roc_auc"] > best_roc_auc:
-                best_roc_auc = metrics["test_roc_auc"]
+            if metrics["cv_roc_auc_mean"] > best_roc_auc:
+                best_roc_auc = metrics["cv_roc_auc_mean"]
                 best_run_id = run.info.run_id
                 best_model_name = run_name
 
